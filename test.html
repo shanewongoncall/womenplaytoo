@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WomenPlayToo Avatar Generator</title>
+    <link rel="icon" href="favicon.png" type="image/png">
+    <style>
+        /* 引入“天王星像素体”字体 */
+        @font-face {
+            font-family: 'TianWangXingPixel';
+            src: url('TianWangXing-Pixel-Font.woff2') format('woff2'),
+                 url('TianWangXing-Pixel-Font.woff') format('woff'),
+                 url('TianWangXing-Pixel-Font.ttf') format('truetype');
+        }
+
+        body {
+            font-family: 'TianWangXingPixel', sans-serif; /* 统一字体 */
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .image-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 20px auto;
+            border-radius: 50%;
+            overflow: hidden;
+            touch-action: none;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        #profile-image {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform-origin: center center;
+            max-width: none;
+            max-height: none;
+        }
+
+        #overlay-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .button {
+            background-color: rgb(120, 220, 11); /* 按钮颜色 */
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            font-size: 16px;
+            margin: 10px 0;
+            cursor: pointer;
+            border-radius: 5px;
+            width: 200px;
+            font-family: 'TianWangXingPixel', sans-serif; /* 统一字体 */
+        }
+
+        .button:hover {
+            background-color: #a8d100; /* 悬停状态颜色 */
+        }
+
+        .button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #upload {
+            display: none;
+        }
+
+        .upload-label {
+            background-color: rgb(120, 220, 11); /* 按钮颜色 */
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            font-size: 16px;
+            margin: 10px 0;
+            cursor: pointer;
+            border-radius: 5px;
+            width: 200px;
+            font-family: 'TianWangXingPixel', sans-serif; /* 统一字体 */
+        }
+
+        .upload-label:hover {
+            background-color: #a8d100; /* 悬停状态颜色 */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Phoning头像生成器</h1>
+        <label for="upload" class="upload-label">Select Image</label>
+        <input type="file" id="upload" accept="image/*">
+        <div class="image-container" id="image-container">
+            <img id="profile-image" src="" alt="" />
+            <img id="overlay-image" src="bp.png" alt="Border" />
+        </div>
+        <button id="generate-button" class="button" disabled>Generate Avatar</button>
+    </div>
+    <canvas id="canvas" style="display: none;"></canvas>
+
+    <script>
+        const uploadInput = document.getElementById('upload');
+        const profileImage = document.getElementById('profile-image');
+        const imageContainer = document.getElementById('image-container');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const generateButton = document.getElementById('generate-button');
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+
+        const containerSize = 300; // 显示容器的尺寸
+        const canvasSize = 1200; // Canvas实际尺寸，增加清晰度和背景大小
+        const avatarSize = 800;   // 头像实际尺寸
+        const dpr = window.devicePixelRatio || 1; // 设备像素比
+
+        // 设置Canvas尺寸并考虑设备像素比
+        canvas.width = canvasSize * dpr;
+        canvas.height = canvasSize * dpr;
+        ctx.scale(dpr, dpr);
+
+        uploadInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                profileImage.src = e.target.result;
+                profileImage.onload = function() {
+                    fitImageToContainer();
+                    generateButton.disabled = false;
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function fitImageToContainer() {
+            const imgWidth = profileImage.naturalWidth;
+            const imgHeight = profileImage.naturalHeight;
+            const imgAspectRatio = imgWidth / imgHeight;
+            const containerAspectRatio = 1; // 容器是正方形
+
+            if (imgAspectRatio > containerAspectRatio) {
+                // 图片更宽，以高度为基准
+                scale = containerSize / imgHeight;
+            } else {
+                // 图片更高或等比，以宽度为基准
+                scale = containerSize / imgWidth;
+            }
+
+            profileImage.style.width = `${imgWidth}px`;
+            profileImage.style.height = `${imgHeight}px`;
+            updateImagePosition();
+        }
+
+        let isDragging = false;
+        let startX, startY;
+        let initialDistance = 0;
+
+        imageContainer.addEventListener('touchstart', (event) => {
+            if (event.touches.length === 1) {
+                isDragging = true;
+                startX = event.touches[0].clientX - translateX;
+                startY = event.touches[0].clientY - translateY;
+            } else if (event.touches.length === 2) {
+                initialDistance = getDistance(event.touches[0], event.touches[1]);
+            }
+        });
+
+        imageContainer.addEventListener('touchmove', (event) => {
+            if (isDragging && event.touches.length === 1) {
+                translateX = event.touches[0].clientX - startX;
+                translateY = event.touches[0].clientY - startY;
+                updateImagePosition();
+            } else if (event.touches.length === 2) {
+                const currentDistance = getDistance(event.touches[0], event.touches[1]);
+                const scaleFactor = currentDistance / initialDistance;
+                scale *= scaleFactor;
+                initialDistance = currentDistance;
+                updateImagePosition();
+            }
+            event.preventDefault();
+        });
+
+        imageContainer.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        function updateImagePosition() {
+            profileImage.style.transform = `translate(calc(-50% + ${translateX}px), calc(-50% + ${translateY}px)) scale(${scale})`;
+        }
+
+        function getDistance(touch1, touch2) {
+            const dx = touch1.clientX - touch2.clientX;
+            const dy = touch1.clientY - touch2.clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        generateButton.addEventListener('click', generateImage);
+
+        function generateImage() {
+            const dataUrl = combineImages();
+            const newWindow = window.open();
+            newWindow.document.write(`
+                <!DOCTYPE html>
+                <html lang="zh">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Phoning生成的头像</title>
+                    <style>
+                        @font-face {
+                            font-family: 'TianWangXingPixel';
+                            src: url('TianWangXing-Pixel-Font.woff2') format('woff2'),
+                                 url('TianWangXing-Pixel-Font.woff') format('woff'),
+                                 url('TianWangXing-Pixel-Font.ttf') format('truetype');
+                        }
+                        body {
+                            font-family: 'TianWangXingPixel', sans-serif;
+                            background-color: #f0f0f0;
+                            margin: 0;
+                            padding: 20px;
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            justify-content: center;
+                            min-height: 100vh;
+                            text-align: center;
+                        }
+                        .avatar-container {
+                            background-color: white;
+                            padding: 20px;
+                            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                            max-width: 100%;
+                        }
+                        img {
+                            max-width: 100%;
+                            height: auto;
+                            margin-bottom: 20px;
+                        }
+                        p {
+                            color: #666;
+                            margin-bottom: 20px;
+                            font-family: 'TianWangXingPixel', sans-serif;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="avatar-container">
+                        <img src="${dataUrl}" alt="生成的头像">
+                        <p>长按图片保存头像</p>
+                    </div>
+                </body>
+                </html>
+            `);
+            newWindow.document.close();
+        }
+
+        function combineImages() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 设置白色背景
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+            // 计算头像在画布中的位置，使其居中并留有足够的边距
+            const centerX = canvasSize / 2;
+            const centerY = canvasSize / 2;
+            const avatarRadius = avatarSize / 2;
+
+            // 绘制圆形剪裁区域
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, avatarRadius, 0, Math.PI * 2);
+            ctx.clip();
+
+            const imgWidth = profileImage.naturalWidth;
+            const imgHeight = profileImage.naturalHeight;
+
+            // 计算缩放比例，考虑Canvas与容器尺寸的比例
+            const scaleFactor = avatarSize / containerSize;
+
+            const scaledWidth = imgWidth * scale * scaleFactor;
+            const scaledHeight = imgHeight * scale * scaleFactor;
+            const drawX = centerX - scaledWidth / 2 + translateX * scaleFactor;
+            const drawY = centerY - scaledHeight / 2 + translateY * scaleFactor;
+
+            ctx.drawImage(profileImage, drawX, drawY, scaledWidth, scaledHeight);
+
+            ctx.restore();
+
+            // 绘制边框
+            const overlayImage = new Image();
+            overlayImage.src = document.getElementById('overlay-image').src;
+            ctx.drawImage(overlayImage, centerX - avatarRadius, centerY - avatarRadius, avatarSize, avatarSize);
+
+            return canvas.toDataURL('image/jpeg'); // 输出为JPEG格式
+        }
+    </script>
+</body>
+</html>
